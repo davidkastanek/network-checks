@@ -1,0 +1,37 @@
+checks:
+  - name: google.com
+    type: http
+    dest: https://google.com
+    repeat: 30s
+  - name: seznam.cz
+    type: icmp
+    dest: seznam.cz
+    repeat: 10s
+  - name: 8.8.8.8
+    type: icmp
+    dest: 8.8.8.8
+    repeat: 10s
+  - name: anthena
+    type: icmp
+    dest: 192.168.192.1
+    repeat: 10s
+  - name: grafana
+    type: http
+    dest: https://grafana.kastankovi.cz
+    repeat: 60s
+  - name: kastankovi.cz
+    type: icmp
+    dest: kastankovi.cz
+    repeat: 10s
+  - name: plex
+    type: http
+    dest: http://192.168.88.134:32400/identity
+    repeat: 60s
+  - name: server
+    type: icmp
+    dest: 192.168.88.134
+    repeat: 10s
+  - name: router
+    type: icmp
+    dest: 192.168.88.1
+    repeat: 10s
