@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"time"
 )
 
@@ -74,7 +75,17 @@ func runHttpCheck(check Check, c chan CheckResult) {
 
 func runIcmpCheck(check Check, c chan CheckResult) {
 	runAt := time.Now()
-	cmd := exec.Command("ping", "-c", "1", check.Dest)
+	var cmd *exec.Cmd
+
+	// Detect the OS and set the appropriate ping command
+	if runtime.GOOS == "windows" {
+		// On Windows, use -n for count and -w for timeout (in milliseconds)
+		cmd = exec.Command("ping", "-n", "1", "-w", "1000", check.Dest)
+	} else {
+		// On Unix-like systems (Linux, macOS), use -c for count and -W for timeout (in seconds)
+		cmd = exec.Command("ping", "-c", "1", "-W", "1", check.Dest)
+	}
+
 	err := cmd.Run()
 	duration := time.Since(runAt)
 
