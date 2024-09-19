@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/fatih/color"
 	"gopkg.in/yaml.v2"
@@ -8,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -74,8 +78,8 @@ func runHttpCheck(check Check, c chan CheckResult) {
 }
 
 func runIcmpCheck(check Check, c chan CheckResult) {
-	runAt := time.Now()
 	var cmd *exec.Cmd
+	var pingOutput bytes.Buffer
 
 	// Detect the OS and set the appropriate ping command
 	if runtime.GOOS == "windows" {
@@ -86,22 +90,77 @@ func runIcmpCheck(check Check, c chan CheckResult) {
 		cmd = exec.Command("ping", "-c", "1", "-W", "1", check.Dest)
 	}
 
+	// Capture the output
+	cmd.Stdout = &pingOutput
+
+	runAt := time.Now()
 	err := cmd.Run()
 	duration := time.Since(runAt)
 
 	checkResult := CheckResult{
-		check:    check,
-		runAt:    runAt,
-		duration: duration,
+		check: check,
+		runAt: runAt,
 	}
 
-	if err != nil {
-		checkResult.status = false
+	// Parse the ping command output to get the actual round-trip time (RTT)
+	if err == nil {
+		rtt, parseErr := parsePingOutput(pingOutput.String())
+		if parseErr == nil {
+			checkResult.duration = rtt // Set the RTT as the actual duration
+			checkResult.status = true
+		} else {
+			checkResult.status = false
+		}
 	} else {
-		checkResult.status = true
+		checkResult.status = false
+		checkResult.duration = duration // Fallback to the execution time if an error occurs
 	}
 
 	c <- checkResult
+}
+
+func parsePingOutput(output string) (time.Duration, error) {
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// macOS format: round-trip min/avg/max/stddev = 8.390/8.390/8.390/0.000 ms
+		if runtime.GOOS != "windows" && strings.Contains(line, "round-trip") {
+			parts := strings.Split(line, "=")
+			if len(parts) < 2 {
+				continue // Skip this line if it doesn't have the expected format
+			}
+			metrics := strings.Fields(parts[1])
+			if len(metrics) < 1 {
+				continue // Skip if there are not enough fields
+			}
+			avgRTTStr := strings.Split(metrics[0], "/")[1] // Extract the average RTT
+			if avgRTTStr == "" {
+				continue // Ensure the average RTT string exists
+			}
+			rtt, err := strconv.ParseFloat(avgRTTStr, 64)
+			if err != nil {
+				return 0, fmt.Errorf("error parsing RTT: %v", err)
+			}
+			return time.Duration(rtt*1e6) * time.Nanosecond, nil // Convert ms to nanoseconds
+		}
+
+		// Windows format: Minimum = 0ms, Maximum = 0ms, Average = 0ms
+		if runtime.GOOS == "windows" && strings.Contains(line, "Average =") {
+			parts := strings.Split(line, "Average =")
+			if len(parts) < 2 {
+				continue // Skip if the line doesn't have the expected format
+			}
+			rttStr := strings.TrimSpace(parts[1]) // Extract the RTT value (e.g., 1ms)
+			rttStr = strings.Replace(rttStr, "ms", "", 1)
+			rtt, err := strconv.Atoi(rttStr)
+			if err != nil {
+				return 0, fmt.Errorf("error parsing Windows RTT: %v", err)
+			}
+			return time.Duration(rtt) * time.Millisecond, nil // Convert ms to duration
+		}
+	}
+	return 0, fmt.Errorf("RTT not found in output")
 }
 
 func formatDuration(d time.Duration) string {

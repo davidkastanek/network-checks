@@ -11,7 +11,15 @@ checks:
     type: icmp
     dest: 8.8.8.8
     repeat: 10s
-  - name: anthena
+  - name: nordic 4th hop
+    type: icmp
+    dest: 10.11.17.150
+    repeat: 60s
+  - name: nordic 3rd hop
+    type: icmp
+    dest: 10.11.17.146
+    repeat: 60s
+  - name: antenna
     type: icmp
     dest: 192.168.192.1
     repeat: 10s
